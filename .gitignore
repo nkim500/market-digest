@@ -1,0 +1,37 @@
+# Binaries
+dashboard/dashboard
+jobs/jobs
+/bin/
+
+# Local DB and derived data
+data/*.db
+data/*.db-*
+data/*.csv
+!data/.gitkeep
+
+# User config (only *.example.yml is tracked)
+config/*.yml
+!config/*.example.yml
+!config/sources.yml
+
+# User profile
+modes/_profile.md
+
+# Local Claude context
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/memory/
+
+# Agent plan board
+implementation_plan.md
+
+# OS noise
+.DS_Store
+
+# Go build artifacts
+*.out
+*.test
+*.prof
+
+# Reports written by modes
+data/reports/
