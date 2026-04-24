@@ -19,6 +19,12 @@ cp config/watchlist.example.yml config/watchlist.yml # edit to taste
 ./bin/dashboard
 ```
 
+Or run the smoke test end-to-end:
+
+```bash
+./scripts/smoke.sh
+```
+
 ## Disclaimer
 
 This tool surfaces public information for educational and ideational purposes. It is not investment advice. All data comes from public disclosures; no non-public information is used.
