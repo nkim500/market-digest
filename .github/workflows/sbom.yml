@@ -21,6 +21,8 @@ jobs:
           output-file: market-digest-sbom.spdx.json
 
       - name: Upload SBOM to release
+        # anchore/sbom-action auto-uploads when running in a release context,
+        # so the asset may already exist; --clobber keeps the step idempotent.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload ${{ github.event.release.tag_name }} market-digest-sbom.spdx.json
+        run: gh release upload ${{ github.event.release.tag_name }} market-digest-sbom.spdx.json --clobber
