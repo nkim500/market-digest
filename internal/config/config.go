@@ -56,15 +56,18 @@ type WatchlistEntry struct {
 }
 
 type Sources struct {
-	Insiders   map[string]InsiderSource `yaml:"insiders"`
-	AlertRules AlertRules               `yaml:"alert_rules"`
-	HTTP       HTTPConfig               `yaml:"http"`
+	MaxLookbackDays int                      `yaml:"max_lookback_days"`
+	Insiders        map[string]InsiderSource `yaml:"insiders"`
+	AlertRules      AlertRules               `yaml:"alert_rules"`
+	HTTP            HTTPConfig               `yaml:"http"`
 }
 
 type InsiderSource struct {
-	URL       string `yaml:"url"`
-	Enabled   bool   `yaml:"enabled"`
-	UserAgent string `yaml:"user_agent,omitempty"`
+	URL          string `yaml:"url,omitempty"`
+	Enabled      bool   `yaml:"enabled"`
+	UserAgent    string `yaml:"user_agent,omitempty"`    // legacy; use UserAgentEnv
+	UserAgentEnv string `yaml:"user_agent_env,omitempty"`
+	APIKeyEnv    string `yaml:"api_key_env,omitempty"`
 }
 
 type AlertRules struct {
