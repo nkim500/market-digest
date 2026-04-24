@@ -1,7 +1,21 @@
 name: SBOM Generation
+# Triggered by release-published. Note: releases cut by release-please use
+# GITHUB_TOKEN, and GitHub's anti-recursion default won't trigger downstream
+# workflows on such events. Two options to handle that:
+#   1. Use a PAT as secrets.RELEASE_PLEASE_TOKEN in .github/workflows/release.yml
+#      so the release creation fires as a real user event.
+#   2. Run this workflow via `workflow_dispatch` after merging a release PR
+#      (gh workflow run sbom.yml -f tag=v0.1.1).
+# The `tag` input exists for path 2.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach the SBOM to (e.g. v0.1.1)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,6 +26,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # For workflow_dispatch, check out the tag explicitly so the SBOM
+          # reflects that exact release rather than current main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Generate SBOM (SPDX)
         uses: anchore/sbom-action@v0
@@ -25,4 +43,5 @@ jobs:
         # so the asset may already exist; --clobber keeps the step idempotent.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload ${{ github.event.release.tag_name }} market-digest-sbom.spdx.json --clobber
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+        run: gh release upload "$TAG" market-digest-sbom.spdx.json --clobber
