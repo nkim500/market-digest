@@ -16,6 +16,8 @@ import (
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check DB, config, and source reachability",
+	// RunE always returns nil so exit code is 0 even when individual components
+	// fail — this is a diagnostic command; callers want the full report.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		home := digestHome()
 		ctx := context.Background()
@@ -24,6 +26,7 @@ var doctorCmd = &cobra.Command{
 
 		// Config
 		cfg, err := config.Load(home)
+		configOK := err == nil
 		if err != nil {
 			fmt.Printf("config: FAIL — %v\n", err)
 		} else {
@@ -38,8 +41,16 @@ var doctorCmd = &cobra.Command{
 		} else {
 			defer conn.Close()
 			var n int
-			_ = conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master").Scan(&n)
-			fmt.Printf("db: ok (%s, %d schema objects)\n", dbPath, n)
+			if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master").Scan(&n); err != nil {
+				fmt.Printf("db: FAIL (schema count) — %v\n", err)
+			} else {
+				fmt.Printf("db: ok (%s, %d schema objects)\n", dbPath, n)
+			}
+		}
+
+		if !configOK {
+			fmt.Println("sources: skipped (config unavailable)")
+			return nil
 		}
 
 		// Sources (HEAD with short timeout)
