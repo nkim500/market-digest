@@ -72,6 +72,14 @@ func (r root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return r, r.ticker.Init()
 		case "4":
 			r.current = screenJobs
+		case "enter":
+			if r.current == screenWatchlist {
+				if t := r.watch.SelectedTicker(); t != "" {
+					r.ticker.SetTicker(t)
+					r.current = screenTicker
+					return r, r.ticker.Init()
+				}
+			}
 		}
 	}
 	switch r.current {
