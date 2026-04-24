@@ -1,0 +1,7 @@
+tickers:
+  - ticker: NVDA
+    note: "Core AI infra hold"
+    added: 2026-01-15
+  - ticker: CEG
+    note: "Grid/nuclear thesis"
+    added: 2026-02-01

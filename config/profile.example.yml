@@ -1,0 +1,23 @@
+user:
+  display_name: "Your Name"
+  timezone: "America/New_York"
+
+risk:
+  tolerance: "moderate"          # conservative | moderate | aggressive
+  max_position_pct: 5
+  notes: "No leverage. No options outside watchlist."
+
+interests:
+  sectors: ["semis", "energy", "biotech"]
+  themes: ["AI infra", "onshoring", "grid buildout"]
+  avoid: ["crypto-adjacent penny stocks"]
+
+reporting:
+  dollar_thresholds:
+    watch: 500000
+    act:   1000000
+  cluster_window_days: 7
+
+notifications:
+  macos: false
+  webhook_url: ""

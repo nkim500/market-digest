@@ -1,0 +1,22 @@
+insiders:
+  senate:
+    url: "https://raw.githubusercontent.com/jeremiak/senate-stock-watcher-data/main/aggregate/all_transactions.json"
+    enabled: true
+  house:
+    url: "https://raw.githubusercontent.com/aviaryan/house-stock-watcher-data/main/transactions/all_transactions.json"
+    enabled: true
+  sec_form4:
+    url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4&output=atom"
+    enabled: false
+    user_agent: "market-digest <your-email@example.com>"
+
+alert_rules:
+  watchlist_hit:    { severity: watch }
+  amount_over_500k: { severity: watch }
+  amount_over_1m:   { severity: act }
+  cluster_3_in_7d:  { severity: watch }
+
+http:
+  timeout_seconds: 30
+  max_retries: 3
+  backoff_ms: 1000
