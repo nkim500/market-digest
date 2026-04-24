@@ -80,7 +80,7 @@ func (m WatchlistModel) View() string {
 		}
 		b.WriteString(line + "\n")
 	}
-	b.WriteString("\n" + theme.Footer.Render("r reload · enter → ticker detail (not yet wired) · 1-4 screens · q quit") + "\n")
+	b.WriteString("\n" + theme.Footer.Render("r reload · enter → ticker detail · 1-4 screens · q quit") + "\n")
 	return b.String()
 }
 

@@ -42,27 +42,32 @@ func runFetchInsidersWithConn(ctx context.Context, conn *sql.DB, home string) (r
 		return 0, 0, err
 	}
 
-	// Sync watchlist YAML -> DB (authored source wins; TUI edits write both).
+	// Sync watchlist YAML -> DB (YAML is the authored source of truth).
 	if err := syncWatchlist(ctx, conn, cfg.Watchlist); err != nil {
 		return 0, 0, fmt.Errorf("sync watchlist: %w", err)
 	}
 
-	client := insiders.NewClient(insiders.ClientOptions{
-		Timeout:    time.Duration(cfg.Sources.HTTP.TimeoutSeconds) * time.Second,
-		MaxRetries: cfg.Sources.HTTP.MaxRetries,
-		BackoffMS:  cfg.Sources.HTTP.BackoffMS,
-	})
+	// Per-source clients so each can carry its own User-Agent header. Senate
+	// and House don't need one; SEC EDGAR requires it.
+	newClient := func(ua string) *insiders.Client {
+		return insiders.NewClient(insiders.ClientOptions{
+			Timeout:    time.Duration(cfg.Sources.HTTP.TimeoutSeconds) * time.Second,
+			MaxRetries: cfg.Sources.HTTP.MaxRetries,
+			BackoffMS:  cfg.Sources.HTTP.BackoffMS,
+			UserAgent:  ua,
+		})
+	}
 
 	var all []insiders.Trade
 	if src, ok := cfg.Sources.Insiders["senate"]; ok && src.Enabled {
-		trades, err := client.FetchSenate(ctx, src.URL)
+		trades, err := newClient(src.UserAgent).FetchSenate(ctx, src.URL)
 		if err != nil {
 			return 0, 0, fmt.Errorf("senate: %w", err)
 		}
 		all = append(all, trades...)
 	}
 	if src, ok := cfg.Sources.Insiders["house"]; ok && src.Enabled {
-		trades, err := client.FetchHouse(ctx, src.URL)
+		trades, err := newClient(src.UserAgent).FetchHouse(ctx, src.URL)
 		if err != nil {
 			return 0, 0, fmt.Errorf("house: %w", err)
 		}
@@ -92,16 +97,32 @@ func syncWatchlist(ctx context.Context, conn *sql.DB, w config.Watchlist) error 
 	if _, err := tx.ExecContext(ctx, "DELETE FROM watchlist"); err != nil {
 		return err
 	}
+	now := time.Now().Unix()
 	for _, entry := range w.Tickers {
 		_, err := tx.ExecContext(ctx,
 			"INSERT INTO watchlist (ticker, note, added_ts) VALUES (?, ?, ?)",
-			entry.Ticker, entry.Note, time.Now().Unix(),
+			entry.Ticker, entry.Note, parseAddedTS(entry.Added, now),
 		)
 		if err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+// parseAddedTS turns the user-authored `added: YYYY-MM-DD` string into a unix
+// timestamp. Falls back to `now` if the string is empty or unparseable so a
+// forgotten/malformed field doesn't block the sync.
+func parseAddedTS(raw string, now int64) int64 {
+	if raw == "" {
+		return now
+	}
+	for _, layout := range []string{"2006-01-02", "01/02/2006", time.RFC3339} {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.UTC().Unix()
+		}
+	}
+	return now
 }
 
 var fetchInsidersCmd = &cobra.Command{
