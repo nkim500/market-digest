@@ -37,11 +37,13 @@ func TestStoreInserts_dedupsOnHash(t *testing.T) {
 	for i := range trades {
 		trades[i].Hash = insiders.Hash(trades[i])
 	}
-	newIDs, err := insiders.StoreInserts(ctx, conn, trades)
+	result, err := insiders.StoreInserts(ctx, conn, trades)
 	require.NoError(t, err)
-	require.Len(t, newIDs, 1, "identical trades must dedup")
+	require.Len(t, result.IDs, 1, "identical trades must dedup")
+	require.Len(t, result.Trades, 1, "identical trades must dedup")
 
-	newIDs, err = insiders.StoreInserts(ctx, conn, trades)
+	result, err = insiders.StoreInserts(ctx, conn, trades)
 	require.NoError(t, err)
-	require.Empty(t, newIDs)
+	require.Empty(t, result.IDs)
+	require.Empty(t, result.Trades)
 }

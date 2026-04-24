@@ -6,13 +6,20 @@ import (
 	"fmt"
 )
 
-// StoreInserts upserts trades with INSERT OR IGNORE on hash. Returns the row
-// ids of actually-inserted rows so the caller can evaluate alert rules only
-// against new data.
-func StoreInserts(ctx context.Context, conn *sql.DB, trades []Trade) ([]int64, error) {
+// StoreResult holds the outcome of a StoreInserts call.
+type StoreResult struct {
+	IDs    []int64 // row IDs of actually-inserted trades
+	Trades []Trade // the Trade values that were actually inserted (parallel to IDs)
+}
+
+// StoreInserts upserts trades with INSERT OR IGNORE on hash. Returns a
+// StoreResult with the row IDs and Trade values of actually-inserted rows so
+// the caller can evaluate alert rules only against new data without an
+// additional per-row SELECT.
+func StoreInserts(ctx context.Context, conn *sql.DB, trades []Trade) (StoreResult, error) {
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return StoreResult{}, err
 	}
 	defer tx.Rollback()
 
@@ -23,35 +30,36 @@ func StoreInserts(ctx context.Context, conn *sql.DB, trades []Trade) ([]int64, e
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
-		return nil, err
+		return StoreResult{}, err
 	}
 	defer stmt.Close()
 
-	var ids []int64
+	var result StoreResult
 	for _, t := range trades {
 		res, err := stmt.ExecContext(ctx,
 			t.Source, t.Filer, t.Role, nullStr(t.Ticker), t.AssetDesc, t.Side,
 			t.AmountLow, t.AmountHigh, t.TransactionTS, t.FilingTS, t.RawURL, t.Hash,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("insert trade hash=%s: %w", t.Hash, err)
+			return StoreResult{}, fmt.Errorf("insert trade hash=%s: %w", t.Hash, err)
 		}
 		affected, err := res.RowsAffected()
 		if err != nil {
-			return nil, err
+			return StoreResult{}, err
 		}
 		if affected == 1 {
 			id, err := res.LastInsertId()
 			if err != nil {
-				return nil, err
+				return StoreResult{}, err
 			}
-			ids = append(ids, id)
+			result.IDs = append(result.IDs, id)
+			result.Trades = append(result.Trades, t)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return StoreResult{}, err
 	}
-	return ids, nil
+	return result, nil
 }
 
 func nullStr(s string) any {
