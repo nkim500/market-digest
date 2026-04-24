@@ -1,0 +1,5 @@
+# market-digest — crontab example. Copy relevant lines to `crontab -e`.
+# Replace /PATH/TO/MARKET-DIGEST with your actual checkout path.
+
+30 7  * * *  cd /PATH/TO/MARKET-DIGEST && ./bin/jobs fetch-insiders >> /tmp/market-digest.log 2>&1
+# 0  */2 * * *  cd /PATH/TO/MARKET-DIGEST && ./bin/jobs compute-momentum >> /tmp/market-digest.log 2>&1   # when implemented
