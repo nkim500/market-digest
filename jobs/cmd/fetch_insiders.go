@@ -15,19 +15,30 @@ import (
 	"github.com/nkim500/market-digest/internal/jobrun"
 )
 
-// RunFetchInsiders is exported so end-to-end tests can call it with a temp
-// home without going through the cobra command.
+// RunFetchInsiders opens its own DB connection and runs the full fetch pipeline.
+// Exported so end-to-end tests can call it with a temp home without going
+// through the cobra command. The cobra command path reuses its already-open
+// conn via runFetchInsidersWithConn to avoid stacking two *sql.DB handles
+// against the same sqlite file (each handle keeps its own MaxOpenConns(1)
+// pool).
 func RunFetchInsiders(ctx context.Context, home string) (rowsIn, rowsNew int, err error) {
-	cfg, err := config.Load(home)
-	if err != nil {
-		return 0, 0, err
-	}
 	conn, err := db.Open(ctx, filepath.Join(home, "data", "digest.db"))
 	if err != nil {
 		return 0, 0, err
 	}
 	defer conn.Close()
 	if _, err := db.Migrate(ctx, conn, filepath.Join(home, "migrations")); err != nil {
+		return 0, 0, err
+	}
+	return runFetchInsidersWithConn(ctx, conn, home)
+}
+
+// runFetchInsidersWithConn is the internal entry point that does the work on
+// a caller-provided connection. Callers are responsible for having already
+// run migrations.
+func runFetchInsidersWithConn(ctx context.Context, conn *sql.DB, home string) (rowsIn, rowsNew int, err error) {
+	cfg, err := config.Load(home)
+	if err != nil {
 		return 0, 0, err
 	}
 
@@ -108,7 +119,7 @@ var fetchInsidersCmd = &cobra.Command{
 			return err
 		}
 		return jobrun.Track(ctx, conn, "fetch-insiders", func(ctx context.Context) (int, int, error) {
-			return RunFetchInsiders(ctx, home)
+			return runFetchInsidersWithConn(ctx, conn, home)
 		})
 	},
 }
