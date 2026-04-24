@@ -26,8 +26,9 @@ func StoreInserts(ctx context.Context, conn *sql.DB, trades []Trade) (StoreResul
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT OR IGNORE INTO insider_trades
 		  (source, filer, role, ticker, asset_desc, side,
-		   amount_low, amount_high, transaction_ts, filing_ts, raw_url, hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   amount_low, amount_high, transaction_ts, filing_ts, raw_url, hash,
+		   shares, price_per_share, transaction_code, security_type)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return StoreResult{}, err
@@ -39,6 +40,8 @@ func StoreInserts(ctx context.Context, conn *sql.DB, trades []Trade) (StoreResul
 		res, err := stmt.ExecContext(ctx,
 			t.Source, t.Filer, t.Role, nullStr(t.Ticker), t.AssetDesc, t.Side,
 			t.AmountLow, t.AmountHigh, t.TransactionTS, t.FilingTS, t.RawURL, t.Hash,
+			nullIntPtr(t.Shares), nullFloatPtr(t.PricePerShare),
+			nullStr(t.TransactionCode), nullStr(t.SecurityType),
 		)
 		if err != nil {
 			return StoreResult{}, fmt.Errorf("insert trade hash=%s: %w", t.Hash, err)
@@ -67,4 +70,18 @@ func nullStr(s string) any {
 		return nil
 	}
 	return s
+}
+
+func nullIntPtr(p *int) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+func nullFloatPtr(p *float64) any {
+	if p == nil {
+		return nil
+	}
+	return *p
 }
