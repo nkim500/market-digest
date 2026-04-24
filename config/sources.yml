@@ -1,10 +1,14 @@
 insiders:
   senate:
-    url: "https://raw.githubusercontent.com/jeremiak/senate-stock-watcher-data/main/aggregate/all_transactions.json"
+    url: "https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json"
     enabled: true
   house:
-    url: "https://raw.githubusercontent.com/aviaryan/house-stock-watcher-data/main/transactions/all_transactions.json"
-    enabled: true
+    # No maintained community JSON mirror exists at the moment. The canonical
+    # source is the House Clerk's FD.zip (XML) at disclosures-clerk.house.gov;
+    # wiring that up requires a custom fetcher. Leave disabled until someone
+    # writes one, or drop in a different mirror here if one surfaces.
+    url: ""
+    enabled: false
   sec_form4:
     url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4&output=atom"
     enabled: false
