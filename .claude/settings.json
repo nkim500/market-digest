@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./bin/jobs:*)",
+      "Bash(./bin/dashboard:*)",
+      "Bash(sqlite3:*)",
+      "Bash(make:*)",
+      "Read",
+      "Write(data/reports/*)",
+      "Edit(modes/*)"
+    ]
+  }
+}
