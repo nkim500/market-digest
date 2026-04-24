@@ -1,0 +1,59 @@
+"🔴 core-architecture":
+  - changed-files:
+      - any-glob-to-any-file:
+          - CLAUDE.md
+          - FORK_NOTES.md
+          - modes/_shared.md
+          - migrations/**
+
+"⚠️ agent-behavior":
+  - changed-files:
+      - any-glob-to-any-file:
+          - modes/*.md
+          - modes/**/*.md
+          - .claude/skills/**
+
+"📊 dashboard":
+  - changed-files:
+      - any-glob-to-any-file:
+          - dashboard/**
+
+"⚙️ jobs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - jobs/**
+
+"🧩 internal":
+  - changed-files:
+      - any-glob-to-any-file:
+          - internal/**
+
+"🔧 scripts":
+  - changed-files:
+      - any-glob-to-any-file:
+          - scripts/**
+
+"⚙️ config":
+  - changed-files:
+      - any-glob-to-any-file:
+          - config/**
+
+"📄 docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - "README*.md"
+          - CONTRIBUTING.md
+          - SECURITY.md
+
+"📦 dependencies":
+  - changed-files:
+      - any-glob-to-any-file:
+          - go.mod
+          - go.sum
+
+"⚙️ ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+          - .coderabbit.yaml

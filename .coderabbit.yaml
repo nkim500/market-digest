@@ -1,0 +1,32 @@
+language: en
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  path_instructions:
+    - path: "CLAUDE.md"
+      instructions: "This file controls agent behavior. Review changes very carefully for conflicts with existing instructions."
+    - path: "modes/_shared.md"
+      instructions: "This file is loaded by every mode. Any changes propagate to all Claude-driven workflows. Flag anything that alters data-access conventions or severity semantics."
+    - path: "modes/**/*.md"
+      instructions: "Mode workflow files. Check that modes still use `./bin/jobs` for fetching rather than WebFetch, and that output framing stays observational (never 'you should trade X')."
+    - path: "migrations/*.sql"
+      instructions: "Migrations are versioned and immutable once applied. Never modify an existing migration; new changes go in a new numbered file."
+    - path: "internal/insiders/hash.go"
+      instructions: "Changing the hash function invalidates all existing dedup keys in data/digest.db. Require a deliberate version-bump plan if the inputs or normalization change."
+    - path: "internal/db/**"
+      instructions: "SQLite open + migrations. The pure-Go driver choice (modernc.org/sqlite) is load-bearing — do not swap to a cgo variant."
+    - path: "jobs/**"
+      instructions: "CLI entry points. Check for command injection, unsafe subprocess invocation, and ensure errors propagate via cobra's RunE return value."
+    - path: "dashboard/**"
+      instructions: "Bubbletea TUI. Check for holding SQL cursors open while issuing other queries on the single-connection pool."
+    - path: "config/sources.yml"
+      instructions: "Tracked config. API keys must never appear here — they belong in env vars referenced via api_key_env. Flag any inline secret."
+chat:
+  auto_reply: true
