@@ -1,18 +1,19 @@
 insiders:
+  # ⚠️ All three sources are DISABLED pending a redesign. The previous default
+  # (timothycarambat/senate-stock-watcher-data) is abandoned — last update
+  # Dec 2020 — so it was ingesting stale trades and showing them as "today"
+  # in the TUI. See docs/handoff-2026-04-24-data-source-redesign.md for the
+  # brief on what should replace this.
   senate:
     url: "https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json"
-    enabled: true
+    enabled: false   # abandoned upstream since 2020-12-05
   house:
-    # No maintained community JSON mirror exists at the moment. The canonical
-    # source is the House Clerk's FD.zip (XML) at disclosures-clerk.house.gov;
-    # wiring that up requires a custom fetcher. Leave disabled until someone
-    # writes one, or drop in a different mirror here if one surfaces.
     url: ""
-    enabled: false
+    enabled: false   # no maintained community mirror; needs direct fetcher (disclosures-clerk.house.gov FD.zip)
   sec_form4:
     url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4&output=atom"
     enabled: false
-    user_agent: "market-digest <your-email@example.com>"
+    user_agent: "market-digest <your-email@example.com>"   # SEC policy requires a contact UA
 
 alert_rules:
   watchlist_hit:    { severity: watch }
