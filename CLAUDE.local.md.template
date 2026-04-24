@@ -1,0 +1,14 @@
+<!-- Copy this file to CLAUDE.local.md (gitignored) for per-machine overrides.
+     Typical uses:
+       - A personal API key or User-Agent for a data source
+       - Notes only relevant to your machine setup
+       - Pointers to external reference material you use locally -->
+
+# Local Overrides
+
+## Paths
+DIGEST_HOME: /path/to/your/checkout
+
+## Data source credentials
+<!-- Do NOT commit real values. Keep them here only if you're sure this file
+     won't leak. Prefer env vars in a shell rc file where possible. -->
