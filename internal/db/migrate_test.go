@@ -86,6 +86,9 @@ func TestMigrate0003AddsForm4Columns(t *testing.T) {
 		}
 		have[name] = typ
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows iteration: %v", err)
+	}
 
 	want := map[string]string{
 		"shares":           "INTEGER",
@@ -102,5 +105,12 @@ func TestMigrate0003AddsForm4Columns(t *testing.T) {
 		if got != typ {
 			t.Errorf("column %s: type %s want %s", col, got, typ)
 		}
+	}
+
+	var idxName string
+	if err := conn.QueryRowContext(ctx,
+		`SELECT name FROM sqlite_master WHERE type='index' AND name='insider_trades_txcode'`,
+	).Scan(&idxName); err != nil {
+		t.Errorf("partial index insider_trades_txcode missing: %v", err)
 	}
 }
