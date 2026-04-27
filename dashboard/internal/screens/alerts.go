@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/nkim500/market-digest/dashboard/internal/theme"
+	"github.com/nkim500/market-digest/dashboard/internal/viewport"
 	"github.com/nkim500/market-digest/internal/data"
 )
 
@@ -20,23 +21,23 @@ type AlertsLoadedMsg struct {
 }
 
 type AlertsModel struct {
-	Conn   *sql.DB
-	Rows   []data.AlertRow
-	Cursor int
-	Width  int
-	Height int
-	Error  string
+	Conn     *sql.DB
+	Rows     []data.AlertRow
+	Viewport viewport.Model
+	Width    int
+	Height   int
+	Error    string
 }
 
 func NewAlertsModel(conn *sql.DB) AlertsModel {
-	return AlertsModel{Conn: conn}
+	return AlertsModel{Conn: conn, Viewport: viewport.New()}
 }
 
 func (m AlertsModel) Init() tea.Cmd { return m.loadCmd() }
 
 func (m AlertsModel) loadCmd() tea.Cmd {
 	return func() tea.Msg {
-		rows, err := data.RecentAlerts(context.Background(), m.Conn, 100)
+		rows, err := data.RecentAlerts(context.Background(), m.Conn, 200)
 		return AlertsLoadedMsg{Rows: rows, Err: err}
 	}
 }
@@ -49,33 +50,22 @@ func (m AlertsModel) Update(msg tea.Msg) (AlertsModel, tea.Cmd) {
 			return m, nil
 		}
 		m.Rows = msg.Rows
-		if m.Cursor >= len(m.Rows) {
-			m.Cursor = 0
-		}
+		m.Viewport = m.Viewport.SetRows(renderAlertRows(m.Rows))
 		return m, nil
-
 	case tea.WindowSizeMsg:
 		m.Width, m.Height = msg.Width, msg.Height
+		m.Viewport = m.Viewport.SetHeight(m.Height - 4) // header + footer reserve
 		return m, nil
-
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "up", "k":
-			if m.Cursor > 0 {
-				m.Cursor--
-			}
-		case "down", "j":
-			if m.Cursor < len(m.Rows)-1 {
-				m.Cursor++
-			}
 		case "x":
-			if m.Cursor < len(m.Rows) {
-				id := m.Rows[m.Cursor].ID
+			if m.Viewport.Cursor() < len(m.Rows) {
+				id := m.Rows[m.Viewport.Cursor()].ID
 				return m, func() tea.Msg {
 					if err := data.MarkSeen(context.Background(), m.Conn, id); err != nil {
 						return AlertsLoadedMsg{Err: err}
 					}
-					rows, err := data.RecentAlerts(context.Background(), m.Conn, 100)
+					rows, err := data.RecentAlerts(context.Background(), m.Conn, 200)
 					return AlertsLoadedMsg{Rows: rows, Err: err}
 				}
 			}
@@ -83,7 +73,10 @@ func (m AlertsModel) Update(msg tea.Msg) (AlertsModel, tea.Cmd) {
 			return m, m.loadCmd()
 		}
 	}
-	return m, nil
+	// Delegate nav keys to viewport.
+	var cmd tea.Cmd
+	m.Viewport, cmd = m.Viewport.Update(msg)
+	return m, cmd
 }
 
 func (m AlertsModel) View() string {
@@ -97,27 +90,34 @@ func (m AlertsModel) View() string {
 		b.WriteString("  (no alerts)\n")
 		return b.String()
 	}
-	for i, r := range m.Rows {
-		line := fmt.Sprintf("  %-16s  %-8s  %-8s  %-6s  %s",
-			time.Unix(r.CreatedTS, 0).Format("2006-01-02 15:04"),
-			r.Source, r.Severity, r.Ticker, r.Title)
+	b.WriteString(m.Viewport.View())
+	b.WriteString("\n" + theme.Footer.Render("↑/↓ j/k move · PgUp/PgDn page · x mark seen · r reload · 1-4 screens · q quit") + "\n")
+	return b.String()
+}
+
+func renderAlertRows(rows []data.AlertRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		txnStr := "—"
+		if r.TransactionTS != nil {
+			txnStr = time.Unix(*r.TransactionTS, 0).UTC().Format("2006-01-02")
+		}
+		alertStr := time.Unix(r.CreatedTS, 0).UTC().Format("01-02 15:04")
+		line := fmt.Sprintf("  txn %-10s  alert %-11s  %-8s  %-6s  %-6s  %s",
+			txnStr, alertStr, r.Source, r.Severity, r.Ticker, r.Title)
 		line = theme.SeverityStyle(r.Severity).Render(line)
 		if r.Seen() {
 			line = theme.Seen.Render(line)
 		}
-		if i == m.Cursor {
-			line = theme.Cursor.Render(line)
-		}
-		b.WriteString(line + "\n")
+		out[i] = line
 	}
-	b.WriteString("\n" + theme.Footer.Render("↑/↓ move · x mark seen · r reload · 1-4 screens · q quit") + "\n")
-	return b.String()
+	return out
 }
 
-// SelectedBody returns the markdown body of the currently-selected row, if any.
+// SelectedBody returns the markdown body of the cursor's row, if any.
 func (m AlertsModel) SelectedBody() string {
-	if m.Cursor >= len(m.Rows) {
+	if m.Viewport.Cursor() >= len(m.Rows) {
 		return ""
 	}
-	return m.Rows[m.Cursor].Body
+	return m.Rows[m.Viewport.Cursor()].Body
 }
