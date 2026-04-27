@@ -9,14 +9,15 @@ import (
 )
 
 type AlertRow struct {
-	ID        int64
-	CreatedTS int64
-	Source    string
-	Severity  string
-	Ticker    string
-	Title     string
-	Body      string
-	SeenTS    *int64
+	ID            int64
+	CreatedTS     int64
+	Source        string
+	Severity      string
+	Ticker        string
+	Title         string
+	Body          string
+	SeenTS        *int64
+	TransactionTS *int64 // nil for cluster/non-trade alerts; populated from payload.transaction_ts
 }
 
 func (a AlertRow) Time() time.Time { return time.Unix(a.CreatedTS, 0) }
@@ -24,7 +25,8 @@ func (a AlertRow) Seen() bool      { return a.SeenTS != nil }
 
 func RecentAlerts(ctx context.Context, conn *sql.DB, limit int) ([]AlertRow, error) {
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, created_ts, source, severity, COALESCE(ticker,''), title, COALESCE(body,''), seen_ts
+		SELECT id, created_ts, source, severity, COALESCE(ticker,''), title, COALESCE(body,''), seen_ts,
+		       CAST(json_extract(payload, '$.transaction_ts') AS INTEGER) AS transaction_ts
 		FROM alerts
 		ORDER BY (seen_ts IS NULL) DESC, created_ts DESC
 		LIMIT ?
@@ -36,13 +38,17 @@ func RecentAlerts(ctx context.Context, conn *sql.DB, limit int) ([]AlertRow, err
 	var out []AlertRow
 	for rows.Next() {
 		var a AlertRow
-		var seen sql.NullInt64
-		if err := rows.Scan(&a.ID, &a.CreatedTS, &a.Source, &a.Severity, &a.Ticker, &a.Title, &a.Body, &seen); err != nil {
+		var seen, txn sql.NullInt64
+		if err := rows.Scan(&a.ID, &a.CreatedTS, &a.Source, &a.Severity, &a.Ticker, &a.Title, &a.Body, &seen, &txn); err != nil {
 			return nil, err
 		}
 		if seen.Valid {
 			s := seen.Int64
 			a.SeenTS = &s
+		}
+		if txn.Valid {
+			s := txn.Int64
+			a.TransactionTS = &s
 		}
 		out = append(out, a)
 	}

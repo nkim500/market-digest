@@ -10,14 +10,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/nkim500/market-digest/dashboard/internal/theme"
+	"github.com/nkim500/market-digest/dashboard/internal/viewport"
 	"github.com/nkim500/market-digest/internal/data"
 )
 
 type TickerModel struct {
-	Conn   *sql.DB
-	Ticker string
-	Rows   []data.InsiderTradeRow
-	Error  string
+	Conn     *sql.DB
+	Ticker   string
+	Rows     []data.InsiderTradeRow
+	Viewport viewport.Model
+	Width    int
+	Height   int
+	Error    string
 }
 
 type tickerLoadedMsg struct {
@@ -26,10 +30,9 @@ type tickerLoadedMsg struct {
 }
 
 func NewTickerModel(conn *sql.DB) TickerModel {
-	return TickerModel{Conn: conn}
+	return TickerModel{Conn: conn, Viewport: viewport.New()}
 }
 
-// SetTicker lets the root model pass a ticker in when switching screens.
 func (m *TickerModel) SetTicker(t string) { m.Ticker = t }
 
 func (m TickerModel) Init() tea.Cmd {
@@ -39,7 +42,7 @@ func (m TickerModel) Init() tea.Cmd {
 	ticker := m.Ticker
 	conn := m.Conn
 	return func() tea.Msg {
-		rows, err := data.RecentInsiderTrades(context.Background(), conn, ticker, 50)
+		rows, err := data.RecentInsiderTrades(context.Background(), conn, ticker, 200)
 		return tickerLoadedMsg{rows, err}
 	}
 }
@@ -49,11 +52,19 @@ func (m TickerModel) Update(msg tea.Msg) (TickerModel, tea.Cmd) {
 	case tickerLoadedMsg:
 		if msg.Err != nil {
 			m.Error = msg.Err.Error()
-		} else {
-			m.Rows = msg.Rows
+			return m, nil
 		}
+		m.Rows = msg.Rows
+		m.Viewport = m.Viewport.SetRows(renderTickerRows(m.Rows))
+		return m, nil
+	case tea.WindowSizeMsg:
+		m.Width, m.Height = msg.Width, msg.Height
+		m.Viewport = m.Viewport.SetHeight(m.Height - 5)
+		return m, nil
 	}
-	return m, nil
+	var cmd tea.Cmd
+	m.Viewport, cmd = m.Viewport.Update(msg)
+	return m, cmd
 }
 
 func (m TickerModel) View() string {
@@ -70,16 +81,23 @@ func (m TickerModel) View() string {
 	if m.Error != "" {
 		return b.String() + "ERROR: " + m.Error + "\n"
 	}
-	b.WriteString("  Price pane: momentum mode not yet implemented.\n\n")
 	b.WriteString("  Recent insider trades:\n")
 	if len(m.Rows) == 0 {
 		b.WriteString("    (none)\n")
+		return b.String()
 	}
-	for _, r := range m.Rows {
-		b.WriteString(fmt.Sprintf("    %s  %-20s  %-7s  $%d-$%d\n",
+	b.WriteString(m.Viewport.View())
+	b.WriteString("\n" + theme.Footer.Render("↑/↓ j/k move · PgUp/PgDn page · 1-4 screens · q quit") + "\n")
+	return b.String()
+}
+
+func renderTickerRows(rows []data.InsiderTradeRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = fmt.Sprintf("    %s  %-20s  %-7s  $%d-$%d",
 			time.Unix(r.TransactionTS, 0).Format("2006-01-02"),
 			r.Filer, r.Side, r.AmountLow, r.AmountHigh,
-		))
+		)
 	}
-	return b.String()
+	return out
 }

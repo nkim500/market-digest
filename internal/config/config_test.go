@@ -24,8 +24,10 @@ func TestLoad_readsExampleFiles(t *testing.T) {
 	require.NotEmpty(t, cfg.Watchlist.Tickers)
 	require.Equal(t, "NVDA", cfg.Watchlist.Tickers[0].Ticker)
 
-	require.True(t, cfg.Sources.Insiders["senate"].Enabled)
-	require.False(t, cfg.Sources.Insiders["sec_form4"].Enabled)
+	require.True(t, cfg.Sources.Insiders["sec_form4"].Enabled)
+	require.Equal(t, "SEC_USER_AGENT", cfg.Sources.Insiders["sec_form4"].UserAgentEnv)
+	require.False(t, cfg.Sources.Insiders["quiver"].Enabled) // dormant until QUIVER_API_KEY is set
+	require.Equal(t, 7, cfg.Sources.MaxLookbackDays)
 
 	require.Equal(t, "watch", cfg.Sources.AlertRules.WatchlistHit.Severity)
 }
@@ -52,4 +54,73 @@ http: {timeout_seconds: 30, max_retries: 3, backoff_ms: 1000}
 	cfg, err := config.Load(dir)
 	require.NoError(t, err)
 	require.Equal(t, "Real", cfg.Profile.User.DisplayName)
+}
+
+func TestSourcesParsesMaxLookbackAndEnvRefs(t *testing.T) {
+	tmp := t.TempDir()
+	configDir := filepath.Join(tmp, "config")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "sources.yml"), []byte(`
+max_lookback_days: 7
+
+insiders:
+  sec_form4:
+    enabled: true
+    user_agent_env: SEC_USER_AGENT
+  finnhub:
+    enabled: true
+    api_key_env: FINNHUB_API_KEY
+  quiver:
+    enabled: false
+    api_key_env: QUIVER_API_KEY
+
+alert_rules:
+  watchlist_hit:    { severity: watch }
+  amount_over_500k: { severity: watch }
+  amount_over_1m:   { severity: act }
+  cluster_3_in_7d:  { severity: watch }
+
+http:
+  timeout_seconds: 30
+  max_retries: 3
+  backoff_ms: 1000
+`), 0o644); err != nil {
+		t.Fatalf("write sources.yml: %v", err)
+	}
+	// profile + watchlist are required by Load; write minimal stubs.
+	if err := os.WriteFile(filepath.Join(configDir, "profile.yml"), []byte("user:\n  display_name: test\n"), 0o644); err != nil {
+		t.Fatalf("write profile.yml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "watchlist.yml"), []byte("tickers: []\n"), 0o644); err != nil {
+		t.Fatalf("write watchlist.yml: %v", err)
+	}
+
+	cfg, err := config.Load(tmp)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Sources.MaxLookbackDays != 7 {
+		t.Errorf("MaxLookbackDays = %d; want 7", cfg.Sources.MaxLookbackDays)
+	}
+	sec := cfg.Sources.Insiders["sec_form4"]
+	if !sec.Enabled {
+		t.Error("sec_form4 should be enabled")
+	}
+	if sec.UserAgentEnv != "SEC_USER_AGENT" {
+		t.Errorf("sec_form4.UserAgentEnv = %q; want SEC_USER_AGENT", sec.UserAgentEnv)
+	}
+	fh := cfg.Sources.Insiders["finnhub"]
+	if fh.APIKeyEnv != "FINNHUB_API_KEY" {
+		t.Errorf("finnhub.APIKeyEnv = %q; want FINNHUB_API_KEY", fh.APIKeyEnv)
+	}
+	qv := cfg.Sources.Insiders["quiver"]
+	if qv.Enabled {
+		t.Error("quiver should be disabled by default")
+	}
+	if qv.APIKeyEnv != "QUIVER_API_KEY" {
+		t.Errorf("quiver.APIKeyEnv = %q; want QUIVER_API_KEY", qv.APIKeyEnv)
+	}
 }

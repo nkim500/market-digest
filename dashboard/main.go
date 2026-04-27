@@ -57,6 +57,12 @@ func (r root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		r.width, r.height = msg.Width, msg.Height
+		// Broadcast to all screens so their viewports size correctly before first visit.
+		r.alerts, _ = r.alerts.Update(msg)
+		r.watch, _ = r.watch.Update(msg)
+		r.ticker, _ = r.ticker.Update(msg)
+		r.jobs, _ = r.jobs.Update(msg)
+		return r, nil
 	case lastRunMsg:
 		r.lastRun = msg.row
 	case tea.KeyMsg:
@@ -148,7 +154,7 @@ func main() {
 
 	r := root{
 		conn:    conn,
-		current: screenAlerts,
+		current: screenWatchlist,
 		dbPath:  dbPath,
 		alerts:  screens.NewAlertsModel(conn),
 		watch:   screens.NewWatchlistModel(conn),

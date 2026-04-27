@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -47,32 +49,115 @@ func runFetchInsidersWithConn(ctx context.Context, conn *sql.DB, home string) (r
 		return 0, 0, fmt.Errorf("sync watchlist: %w", err)
 	}
 
-	// Per-source clients so each can carry its own User-Agent header. Senate
-	// and House don't need one; SEC EDGAR requires it.
-	newClient := func(ua string) *insiders.Client {
-		return insiders.NewClient(insiders.ClientOptions{
-			Timeout:    time.Duration(cfg.Sources.HTTP.TimeoutSeconds) * time.Second,
-			MaxRetries: cfg.Sources.HTTP.MaxRetries,
-			BackoffMS:  cfg.Sources.HTTP.BackoffMS,
-			UserAgent:  ua,
-		})
+	httpOpts := insiders.ClientOptions{
+		Timeout:    time.Duration(cfg.Sources.HTTP.TimeoutSeconds) * time.Second,
+		MaxRetries: cfg.Sources.HTTP.MaxRetries,
+		BackoffMS:  cfg.Sources.HTTP.BackoffMS,
 	}
 
+	lookbackDays := cfg.Sources.MaxLookbackDays
+	if lookbackDays <= 0 {
+		lookbackDays = 7
+	}
+	cutoff := time.Now().Add(-time.Duration(lookbackDays) * 24 * time.Hour).Unix()
+
 	var all []insiders.Trade
-	if src, ok := cfg.Sources.Insiders["senate"]; ok && src.Enabled {
-		trades, err := newClient(src.UserAgent).FetchSenate(ctx, src.URL)
-		if err != nil {
-			return 0, 0, fmt.Errorf("senate: %w", err)
+
+	// --- SEC Form 4 ---
+	if src, ok := cfg.Sources.Insiders["sec_form4"]; ok && src.Enabled {
+		ua := os.Getenv(src.UserAgentEnv)
+		if ua == "" || strings.Contains(ua, "your-email@example.com") {
+			return 0, 0, fmt.Errorf("SEC user agent required: set %s to a string containing your contact email", src.UserAgentEnv)
 		}
-		all = append(all, trades...)
-	}
-	if src, ok := cfg.Sources.Insiders["house"]; ok && src.Enabled {
-		trades, err := newClient(src.UserAgent).FetchHouse(ctx, src.URL)
-		if err != nil {
-			return 0, 0, fmt.Errorf("house: %w", err)
+		edgarBase := os.Getenv("DIGEST_EDGAR_BASE_URL")
+		if edgarBase == "" {
+			edgarBase = "https://www.sec.gov"
 		}
-		all = append(all, trades...)
+		cikSrc := os.Getenv("DIGEST_CIK_SOURCE_URL")
+		if cikSrc == "" {
+			cikSrc = "https://www.sec.gov/files/company_tickers.json"
+		}
+		cik := insiders.NewCIKCache(insiders.CIKCacheOptions{
+			SourceURL: cikSrc,
+			CachePath: filepath.Join(home, "data", "cik_cache.json"),
+			UserAgent: ua,
+		})
+		opts := httpOpts
+		opts.UserAgent = ua
+		client := insiders.NewClient(opts)
+		for _, wl := range cfg.Watchlist.Tickers {
+			cikStr, err := cik.Resolve(ctx, wl.Ticker)
+			if err != nil {
+				if err == insiders.ErrCIKNotFound {
+					continue
+				}
+				return 0, 0, fmt.Errorf("cik resolve %s: %w", wl.Ticker, err)
+			}
+			watermark := resolveWatermark(ctx, conn, "sec-form4", wl.Ticker)
+			effectiveCutoff := cutoff
+			if watermark > cutoff {
+				effectiveCutoff = watermark
+			}
+			trades, err := client.FetchForm4(ctx, edgarBase, cikStr, effectiveCutoff)
+			if err != nil {
+				return 0, 0, fmt.Errorf("form4 %s: %w", wl.Ticker, err)
+			}
+			all = append(all, trades...)
+		}
 	}
+
+	// --- Finnhub Congressional ---
+	if src, ok := cfg.Sources.Insiders["finnhub"]; ok && src.Enabled {
+		key := os.Getenv(src.APIKeyEnv)
+		if key == "" {
+			fmt.Fprintf(os.Stderr, "[finnhub] %s unset; skipping source\n", src.APIKeyEnv)
+		} else {
+			base := os.Getenv("DIGEST_FINNHUB_BASE_URL")
+			if base == "" {
+				base = "https://finnhub.io/api/v1"
+			}
+			client := insiders.NewClient(httpOpts)
+			for _, wl := range cfg.Watchlist.Tickers {
+				watermark := resolveWatermark(ctx, conn, "finnhub", wl.Ticker)
+				effectiveCutoff := cutoff
+				if watermark > cutoff {
+					effectiveCutoff = watermark
+				}
+				trades, err := client.FetchFinnhubCongressional(ctx, base, key, wl.Ticker, effectiveCutoff)
+				if err != nil {
+					return 0, 0, fmt.Errorf("finnhub %s: %w", wl.Ticker, err)
+				}
+				all = append(all, trades...)
+			}
+		}
+	}
+
+	// --- QuiverQuant Congressional ---
+	if src, ok := cfg.Sources.Insiders["quiver"]; ok && src.Enabled {
+		key := os.Getenv(src.APIKeyEnv)
+		if key == "" {
+			fmt.Fprintf(os.Stderr, "[quiver] %s unset; skipping source\n", src.APIKeyEnv)
+		} else {
+			base := os.Getenv("DIGEST_QUIVER_BASE_URL")
+			if base == "" {
+				base = "https://api.quiverquant.com/beta"
+			}
+			client := insiders.NewClient(httpOpts)
+			for _, wl := range cfg.Watchlist.Tickers {
+				watermark := resolveWatermark(ctx, conn, "quiver", wl.Ticker)
+				effectiveCutoff := cutoff
+				if watermark > cutoff {
+					effectiveCutoff = watermark
+				}
+				trades, err := client.FetchQuiverCongressional(ctx, base, key, wl.Ticker, effectiveCutoff)
+				if err != nil {
+					return 0, 0, fmt.Errorf("quiver %s: %w", wl.Ticker, err)
+				}
+				all = append(all, trades...)
+			}
+		}
+	}
+
 	rowsIn = len(all)
 
 	result, err := insiders.StoreInserts(ctx, conn, all)
@@ -81,11 +166,22 @@ func runFetchInsidersWithConn(ctx context.Context, conn *sql.DB, home string) (r
 	}
 	rowsNew = len(result.IDs)
 
-	// Evaluate rules only against newly inserted trades.
 	if _, err := insiders.EvaluateRules(ctx, conn, result.Trades, cfg.Sources, cfg.Profile); err != nil {
 		return rowsIn, rowsNew, err
 	}
 	return rowsIn, rowsNew, nil
+}
+
+func resolveWatermark(ctx context.Context, conn *sql.DB, source, ticker string) int64 {
+	var ts sql.NullInt64
+	_ = conn.QueryRowContext(ctx,
+		`SELECT MAX(filing_ts) FROM insider_trades WHERE source = ? AND ticker = ?`,
+		source, ticker,
+	).Scan(&ts)
+	if ts.Valid {
+		return ts.Int64
+	}
+	return 0
 }
 
 func syncWatchlist(ctx context.Context, conn *sql.DB, w config.Watchlist) error {
@@ -127,7 +223,7 @@ func parseAddedTS(raw string, now int64) int64 {
 
 var fetchInsidersCmd = &cobra.Command{
 	Use:   "fetch-insiders",
-	Short: "Fetch Senate + House political trades, dedup, write alerts",
+	Short: "Fetch insider trades (SEC Form 4, Finnhub, QuiverQuant), dedup, write alerts",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		home := digestHome()

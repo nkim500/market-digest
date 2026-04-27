@@ -31,6 +31,12 @@ func EvaluateRules(
 	}
 
 	for _, t := range newTrades {
+		// Suppress mechanical Form 4 codes (A=grant, M=exercise, F=tax withholding,
+		// G=gift, D=buyback, etc.) from alert generation. The row is still stored
+		// in insider_trades; it just doesn't alert.
+		if t.Source == "sec-form4" && t.TransactionCode != "P" && t.TransactionCode != "S" {
+			continue
+		}
 		sev := ""
 		reasons := []string{}
 		if t.Ticker != "" {
@@ -94,6 +100,7 @@ func EvaluateRules(
 		SELECT ticker, COUNT(DISTINCT filer) AS filers
 		FROM insider_trades
 		WHERE ticker IS NOT NULL AND ticker != '' AND transaction_ts >= ?
+		  AND (source != 'sec-form4' OR transaction_code IN ('P', 'S'))
 		GROUP BY ticker
 		HAVING filers >= 3
 	`, since)

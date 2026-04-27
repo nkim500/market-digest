@@ -1,0 +1,30 @@
+[
+  {
+    "Representative": "Nancy Pelosi",
+    "ReportDate": "2026-04-20",
+    "TransactionDate": "2026-04-10",
+    "Ticker": "AAPL",
+    "Transaction": "Purchase",
+    "Range": "$1,001 - $15,000",
+    "House": "House",
+    "Amount": 15000,
+    "Party": "D",
+    "last_modified": "2026-04-20",
+    "TickerType": "Stock",
+    "Description": "Stock"
+  },
+  {
+    "Representative": "Tommy Tuberville",
+    "ReportDate": "2026-04-18",
+    "TransactionDate": "2026-04-05",
+    "Ticker": "AAPL",
+    "Transaction": "Sale (Full)",
+    "Range": "$250,001 - $500,000",
+    "House": "Senate",
+    "Amount": 500000,
+    "Party": "R",
+    "last_modified": "2026-04-18",
+    "TickerType": "Stock",
+    "Description": "Stock"
+  }
+]
