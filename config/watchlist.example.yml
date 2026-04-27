@@ -5,3 +5,6 @@ tickers:
   - ticker: CEG
     note: "Grid/nuclear thesis"
     added: 2026-02-01
+  - ticker: ICHR
+    note: "Semi fluid-delivery supplier; light-volume v0.2 test ticker"
+    added: 2026-04-24
