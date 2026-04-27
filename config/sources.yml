@@ -1,19 +1,24 @@
+# Top-level ceiling on how far back any fetcher reaches on a single run.
+# If a (source, ticker) watermark is older than this, the fetcher only
+# looks back this many days. 7 = "I only care about what's new".
+max_lookback_days: 7
+
 insiders:
-  # ⚠️ All three sources are DISABLED pending a redesign. The previous default
-  # (timothycarambat/senate-stock-watcher-data) is abandoned — last update
-  # Dec 2020 — so it was ingesting stale trades and showing them as "today"
-  # in the TUI. See docs/handoff-2026-04-24-data-source-redesign.md for the
-  # brief on what should replace this.
-  senate:
-    url: "https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json"
-    enabled: false   # abandoned upstream since 2020-12-05
-  house:
-    url: ""
-    enabled: false   # no maintained community mirror; needs direct fetcher (disclosures-clerk.house.gov FD.zip)
   sec_form4:
-    url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4&output=atom"
-    enabled: false
-    user_agent: "market-digest <your-email@example.com>"   # SEC policy requires a contact UA
+    enabled: true
+    # SEC policy requires a contact User-Agent. Fetcher fails loudly if this
+    # env var is unset or still contains the placeholder phrase.
+    user_agent_env: SEC_USER_AGENT
+
+  finnhub:
+    enabled: true
+    # Free tier: 60 req/min. If unset, the fetcher logs info-level and skips
+    # this source (non-fatal).
+    api_key_env: FINNHUB_API_KEY
+
+  quiver:
+    enabled: false    # infra ready; to activate: flip this + set QUIVER_API_KEY
+    api_key_env: QUIVER_API_KEY
 
 alert_rules:
   watchlist_hit:    { severity: watch }

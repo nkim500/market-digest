@@ -24,8 +24,10 @@ func TestLoad_readsExampleFiles(t *testing.T) {
 	require.NotEmpty(t, cfg.Watchlist.Tickers)
 	require.Equal(t, "NVDA", cfg.Watchlist.Tickers[0].Ticker)
 
-	require.False(t, cfg.Sources.Insiders["senate"].Enabled)   // disabled since stale-source cleanup
-	require.False(t, cfg.Sources.Insiders["sec_form4"].Enabled)
+	require.True(t, cfg.Sources.Insiders["sec_form4"].Enabled)
+	require.Equal(t, "SEC_USER_AGENT", cfg.Sources.Insiders["sec_form4"].UserAgentEnv)
+	require.False(t, cfg.Sources.Insiders["quiver"].Enabled) // dormant until QUIVER_API_KEY is set
+	require.Equal(t, 7, cfg.Sources.MaxLookbackDays)
 
 	require.Equal(t, "watch", cfg.Sources.AlertRules.WatchlistHit.Severity)
 }
