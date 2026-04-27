@@ -7,6 +7,7 @@ jobs/jobs
 data/*.db
 data/*.db-*
 data/*.csv
+data/cik_cache.json
 !data/.gitkeep
 
 # User config (only *.example.yml is tracked)
