@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "amountFrom": 1001,
+      "amountTo": 15000,
+      "assetName": "Apple Inc",
+      "filingDate": "2026-04-20",
+      "name": "Nancy Pelosi",
+      "ownerType": "",
+      "position": "House",
+      "symbol": "AAPL",
+      "transactionDate": "2026-04-10",
+      "transactionType": "Purchase"
+    },
+    {
+      "amountFrom": 250001,
+      "amountTo": 500000,
+      "assetName": "Apple Inc",
+      "filingDate": "2026-04-18",
+      "name": "Tommy Tuberville",
+      "ownerType": "",
+      "position": "Senate",
+      "symbol": "AAPL",
+      "transactionDate": "2026-04-05",
+      "transactionType": "Sale"
+    }
+  ],
+  "symbol": "AAPL"
+}
