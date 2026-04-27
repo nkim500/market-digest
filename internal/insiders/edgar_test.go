@@ -2,6 +2,7 @@ package insiders
 
 import (
 	"context"
+	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -130,5 +131,137 @@ func TestEdgarFetchIntegration(t *testing.T) {
 	}
 	if trades[0].TransactionCode != "S" {
 		t.Errorf("trades[0].TransactionCode = %q, want S", trades[0].TransactionCode)
+	}
+}
+
+// TestSelectOwnershipFilename verifies the two-pass filename selection logic:
+// known SEC prefixes are preferred over generic .xml files, and comparisons
+// are case-insensitive.
+func TestSelectOwnershipFilename(t *testing.T) {
+	cases := []struct {
+		name  string
+		items []indexEntry
+		want  string
+	}{
+		{
+			name:  "wk-form4 preferred over generic xml",
+			items: []indexEntry{{Name: "other.xml"}, {Name: "wk-form4_123.xml"}},
+			want:  "wk-form4_123.xml",
+		},
+		{
+			name:  "wf-form4 preferred over generic xml",
+			items: []indexEntry{{Name: "other.xml"}, {Name: "wf-form4_456.xml"}},
+			want:  "wf-form4_456.xml",
+		},
+		{
+			name:  "case-insensitive prefix match",
+			items: []indexEntry{{Name: "generic.xml"}, {Name: "WK-FORM4_789.XML"}},
+			want:  "WK-FORM4_789.XML",
+		},
+		{
+			name:  "falls back to first non-index xml",
+			items: []indexEntry{{Name: "0001-index.xml"}, {Name: "filing.xml"}},
+			want:  "filing.xml",
+		},
+		{
+			name:  "index files are skipped",
+			items: []indexEntry{{Name: "0001-index.xml"}, {Name: "0001-index.htm"}},
+			want:  "",
+		},
+		{
+			name:  "empty list returns empty string",
+			items: nil,
+			want:  "",
+		},
+		{
+			name:  "case-insensitive suffix match (.XML extension)",
+			items: []indexEntry{{Name: "DOCUMENT.XML"}},
+			want:  "DOCUMENT.XML",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := selectOwnershipFilename(c.items)
+			if got != c.want {
+				t.Errorf("selectOwnershipFilename() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestStripXMLEncodingNoOpWhenAbsent verifies that stripXMLEncoding produces
+// output that Go's xml.Unmarshal can parse regardless of whether the input has
+// an encoding attribute, no prolog, or just a version-only prolog.
+func TestStripXMLEncodingNoOpWhenAbsent(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{"no prolog", "<root><a/></root>"},
+		{"prolog without encoding", `<?xml version="1.0"?><root><a/></root>`},
+		{"prolog with encoding", `<?xml version="1.0" encoding="UTF-8"?><root><a/></root>`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := string(stripXMLEncoding([]byte(c.body)))
+			var x struct {
+				XMLName xml.Name
+			}
+			if err := xml.Unmarshal([]byte(got), &x); err != nil {
+				t.Errorf("xml.Unmarshal failed after stripXMLEncoding: %v\noutput: %s", err, got)
+			}
+		})
+	}
+}
+
+// TestFetchForm4RespectsCutoff verifies that FetchForm4 stops processing once
+// all filings in the atom feed are older than the cutoff timestamp.
+// The fixture's newest entry has <updated>2026-03-24T17:13:39-04:00</updated>;
+// a cutoff in 2027 is after all fixture filings, so zero trades are expected.
+func TestFetchForm4RespectsCutoff(t *testing.T) {
+	atomBody, _ := os.ReadFile(filepath.Join("testdata", "form4_atom.xml"))
+	indexBody, _ := os.ReadFile(filepath.Join("testdata", "form4_filing_index.json"))
+	ownershipBody, _ := os.ReadFile(filepath.Join("testdata", "form4_ownership.xml"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.RawQuery, "output=atom"):
+			w.Header().Set("Content-Type", "application/atom+xml")
+			_, _ = w.Write(atomBody)
+		case strings.HasSuffix(r.URL.Path, "/index.json"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(indexBody)
+		case strings.HasSuffix(r.URL.Path, ".xml"):
+			w.Header().Set("Content-Type", "text/xml")
+			_, _ = w.Write(ownershipBody)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewClient(ClientOptions{
+		Timeout:    5 * time.Second,
+		MaxRetries: 1,
+		BackoffMS:  10,
+		UserAgent:  "market-digest test",
+	})
+
+	// Cutoff set to 2027-01-01, which is after all fixture filings.
+	// FetchForm4 should break immediately and return zero trades.
+	futureCutoff := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
+	trades, err := client.FetchForm4(context.Background(), srv.URL, "0001045810", futureCutoff)
+	if err != nil {
+		t.Fatalf("FetchForm4: %v", err)
+	}
+	if len(trades) != 0 {
+		t.Errorf("expected 0 trades with future cutoff, got %d", len(trades))
+	}
+
+	// Sanity check: the unfiltered fetch (cutoff=0) should still return trades,
+	// confirming the fixture is valid and the cutoff is the reason for zero above.
+	allTrades, err := client.FetchForm4(context.Background(), srv.URL, "0001045810", 0)
+	if err != nil {
+		t.Fatalf("FetchForm4 (no cutoff): %v", err)
+	}
+	if len(allTrades) == 0 {
+		t.Error("sanity check failed: expected trades with cutoff=0")
 	}
 }

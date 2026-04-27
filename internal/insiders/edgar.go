@@ -119,7 +119,10 @@ type indexResponse struct {
 }
 
 // discoverOwnershipURL fetches the filing folder's index.json and returns
-// the URL to the first .xml file that isn't an index file.
+// the URL to the ownership XML file. It uses two-pass selection: it prefers
+// filenames starting with "wk-form4" or "wf-form4" (the SEC-standard ownership-XML
+// prefixes for Form 4), and falls back to the first .xml that isn't an index file.
+// All comparisons are case-insensitive to handle any capitalisation variants.
 //
 // detailURL looks like:
 //
@@ -150,20 +153,49 @@ func discoverOwnershipURL(ctx context.Context, c *Client, detailURL string) (str
 		return "", fmt.Errorf("parse index.json: %w", err)
 	}
 
-	for _, item := range resp.Directory.Item {
-		name := item.Name
-		if strings.HasSuffix(name, ".xml") && !strings.Contains(name, "-index") {
-			// Build the full URL: same scheme+host+folder/filename.
-			u.Path = path + "/" + name
-			return u.String(), nil
-		}
+	// selectOwnershipFilename performs a two-pass selection over the directory
+	// items: prefer filenames with the known SEC ownership-XML prefixes, then
+	// fall back to the first .xml that isn't an index file. All comparisons are
+	// case-insensitive.
+	if name := selectOwnershipFilename(resp.Directory.Item); name != "" {
+		u.Path = path + "/" + name
+		return u.String(), nil
 	}
 	return "", fmt.Errorf("no ownership XML found in %s", indexURL)
+}
+
+// selectOwnershipFilename picks the best ownership-XML filename from a list of
+// directory items. It prefers names starting with "wk-form4" or "wf-form4"
+// (SEC-standard Form 4 ownership-document prefixes). If none are found it
+// returns the first .xml that doesn't contain "-index". All matching is
+// case-insensitive. Returns "" when no suitable file exists.
+func selectOwnershipFilename(items []indexEntry) string {
+	var fallback string
+	for _, item := range items {
+		nameLower := strings.ToLower(item.Name)
+		if !strings.HasSuffix(nameLower, ".xml") {
+			continue
+		}
+		if strings.Contains(nameLower, "-index") {
+			continue
+		}
+		if strings.HasPrefix(nameLower, "wk-form4") || strings.HasPrefix(nameLower, "wf-form4") {
+			return item.Name // preferred match — return immediately
+		}
+		if fallback == "" {
+			fallback = item.Name
+		}
+	}
+	return fallback
 }
 
 // rebaseURL takes a URL from the atom feed (pointing to www.sec.gov) and
 // replaces the scheme+host with the baseURL that was passed to FetchForm4.
 // This is necessary so integration tests (and any baseURL override) work correctly.
+//
+// NOTE: this helper intentionally lives in edgar.go (not a _test.go file) because
+// FetchForm4 calls it at runtime to reroute atom-feed URLs through whatever baseURL
+// the caller supplied. Moving it to a test-only file would break production builds.
 func rebaseURL(original, baseURL string) string {
 	orig, err := url.Parse(original)
 	if err != nil || original == "" {
